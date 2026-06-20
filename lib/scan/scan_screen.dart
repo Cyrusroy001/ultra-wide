@@ -204,7 +204,7 @@ class _ScanScreenState extends State<ScanScreen> {
 
   Widget _topBar() => Row(
         children: [
-          const Text('scan·pay',
+          const Text('ultra·wide',
               style: TextStyle(
                   fontFamily: AppTokens.mono,
                   letterSpacing: 2,

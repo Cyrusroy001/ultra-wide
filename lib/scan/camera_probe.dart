@@ -155,7 +155,7 @@ class _CameraProbeScreenState extends State<CameraProbeScreen> {
 
   Widget _header() => Row(
         children: [
-          const Text('scan·pay',
+          const Text('ultra·wide',
               style: TextStyle(
                   fontFamily: AppTokens.mono,
                   letterSpacing: 2,
