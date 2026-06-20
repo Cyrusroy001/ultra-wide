@@ -1,5 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../pay/categories.dart';
+
+/// Accent colour for a spend category.
+Color categoryColor(PayCategory c) => switch (c) {
+      PayCategory.food => AppTokens.catFood,
+      PayCategory.travel => AppTokens.catTravel,
+      PayCategory.shopping => AppTokens.catShop,
+      PayCategory.bills => AppTokens.catBills,
+      PayCategory.other => AppTokens.catOther,
+    };
+
 /// Centralised colours + theme for ScanPay. Dark, scanner-first.
 class AppTokens {
   static const ink = Color(0xFF0B0E11);
