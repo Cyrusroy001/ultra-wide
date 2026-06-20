@@ -5,8 +5,16 @@
 
 ## Where we are (2026-06-20)
 
-**Phase 1 (native ultrawide camera) is code-complete and waiting on the on-device
-gate.** Everything else is intentionally NOT built yet — we de-risk the camera first.
+**✅ GATE PASSED on the real S21 FE (SM G990E, id RZCW40EKBPE, Android 16).**
+The native ultrawide hypothesis is proven end-to-end:
+- Enumerated 4 cameras. Auto-pick landed **cam 2 = back, 1.74mm = the ultrawide**
+  (the only working back lens; cam 0 main @5.40mm and cam 1 front are physically dead).
+- Live preview renders into the Flutter Texture from cam 2.
+- ML Kit decoded QR codes from that feed (59 hits in testing).
+- → **The working ultrawide physical camera id on this device is `"2"`.** Persist it
+  as `PrefKeys.cameraId` so the real scan screen skips enumeration.
+
+Now building the rest (device-independent core) on top of the proven camera.
 
 - Branch: `feat/scanpay-mvp` (off `main`).
 - `flutter analyze` clean. `flutter test` green (4 tests, `pickUltrawide`).

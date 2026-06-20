@@ -1,5 +1,7 @@
 # Build & tooling
 *.log
+*.png
+!android/**/*.png
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
