@@ -33,12 +33,15 @@ The entire app is pointless if it can't reach the **true ultrawide** physical ca
 because the main lens is dead. On the S21 FE, `mobile_scanner`'s `wide` lens selection
 is known to be unreliable and can resolve to the broken main lens
 (flutter/flutter #173406, "Unable to Select Ultra-Wide Camera on Samsung S21 FE").
-So we treat the **native physical-camera path as primary**, not as a fallback.
+**So the camera is 100% native. There is NO Dart/`mobile_scanner` camera path** — the
+Dart lens selection is proven broken on this exact device, so we don't ship it, don't
+keep it as a "fallback" (a fallback to the dead lens is worthless), and don't waste a
+build phase scaffolding on it.
 
-Build it behind one clean interface (`LensController`) with two implementations, so
-either path can drive the same UI:
+It lives behind one clean interface (`LensController`) so the UI and the rest of the
+app never touch Camera2 directly, and the camera can be faked in widget tests:
 
-### Primary — native Camera2/CameraX physical-camera shim (Kotlin)
+### The camera — native Camera2/CameraX physical-camera shim (Kotlin)
 
 - Enumerate `CameraManager.cameraIdList`. Among **back-facing** cameras, the ultrawide
   is the one with the **shortest entry in `LENS_INFO_AVAILABLE_FOCAL_LENGTHS`**
@@ -55,16 +58,13 @@ either path can drive the same UI:
 - **Remember the chosen physical id** in prefs so subsequent launches go straight to
   the known-good ultrawide with no enumeration delay.
 
-### Secondary — pure-Dart `mobile_scanner` path
+### Manual camera override (resilience, not a Dart fallback)
 
-- `mobile_scanner` (latest, Flutter 3.29+) with lens selection:
-  ```dart
-  await controller.switchCamera(const SelectCamera(lensType: CameraLensType.wide));
-  final supported = await controller.getSupportedLenses(); // Set<CameraLensType>
-  ```
-- A "cycle lens" control that walks the supported lenses, showing the active one in a
-  chip; default to `wide`. Used as the fallback if the native path is unavailable, and
-  as the fast scaffold to get end-to-end scanning working first.
+Auto-detection (shortest focal length) should land the ultrawide, but OEMs lie. So
+keep a **camera-cycle control** that walks the *natively enumerated back cameras* and
+lets the user manually pin the one that actually shows 0.5×. This is still 100% the
+native pipeline — it just lets a human correct a bad auto-pick. The chosen id is
+remembered. There is no Dart camera anywhere in this control.
 
 ### Capability-aware controls (important)
 
@@ -80,8 +80,11 @@ camera id, facing, focal lengths, flash/AF support, and which id is **active**. 
 is how the user confirms the active camera is the real 0.5× ultrawide and not the
 dead main lens.
 
-Build order: stand up the Dart path first to get scanning working end-to-end, then
-implement the native shim as the primary path behind the `LensController` seam.
+Build order: build and verify this native ultrawide path **first**, on the real
+S21 FE, before any flow or UI is layered on top. It is the one make-or-break risk;
+everything else (parsing, validation, verify sheet, history) is device-independent and
+is built and tested *after* the camera is proven to reach the true 0.5× ultrawide and
+decode a QR from it.
 
 ---
 
@@ -125,8 +128,7 @@ socially-engineering the user into paying the wrong handle.
 ## Features by screen
 
 ### Scan screen (home)
-- Full-screen ultrawide camera preview (native `Texture`, or `mobile_scanner` on the
-  Dart path).
+- Full-screen ultrawide camera preview from the native `Texture`.
 - **Reticle overlay**: dimmed scrim with a clear rounded-square scan window, four
   corner brackets, and an animated sweeping line. Brackets/sweep are **signal lime**
   while scanning; on a successful lock they snap to **amber**, the sweep stops, and a
@@ -258,11 +260,15 @@ cards/windows/sheets).
 ---
 
 ## Packages (latest compatible)
-- `mobile_scanner` — Dart-path camera + ML Kit barcode + lens selection
+- **No Flutter camera/scanner plugin.** The camera is 100% native — CameraX/Camera2 +
+  ML Kit barcode (`com.google.mlkit:barcode-scanning`) on the Kotlin side — because the
+  Dart `mobile_scanner` lens selection is proven broken on the S21 FE. Do not add
+  `mobile_scanner` or `camera`.
 - `android_intent_plus` (or `url_launcher`) — fire the UPI intent
+- `image_picker` — pick a gallery image; its bytes are decoded by the **native** ML Kit
+  barcode scanner (same engine as the live path), not a Dart decoder
 - `shared_preferences` — local persistence
-- `permission_handler` — camera permission flow if needed beyond mobile_scanner
-- (native path uses CameraX/Camera2 + ML Kit barcode on the Kotlin side)
+- `permission_handler` — camera permission flow
 
 No state-management or DI frameworks — plain `setState` / a light `ChangeNotifier`.
 
@@ -278,8 +284,7 @@ lib/
   scan/scan_screen.dart
   scan/reticle.dart          // custom painter: scrim + brackets + sweep
   scan/lens_controller.dart  // interface: capabilities, start/stop, torch, zoom, focus
-  scan/native_lens.dart      // platform-channel impl (primary)
-  scan/dart_lens.dart        // mobile_scanner impl (secondary/fallback)
+  scan/native_lens.dart      // platform-channel impl (the ONLY camera impl)
   pay/upi.dart               // parse upi uri, category logic
   pay/upi_validator.dart     // strict validation, collect-request rejection, guards
   pay/verify_sheet.dart      // unified review + amount pad + app selector + confirm
@@ -326,7 +331,9 @@ android/
 
 ---
 
-Start with the Dart-only path to get scanning working end-to-end, then build the
-**native ultrawide shim as the primary path** behind the `LensController` seam, test
-the active camera on-device via the debug readout, and wire the Verify-sheet flow so
-no payment ever fires without a one-glance confirm.
+Start by building and verifying the **native ultrawide camera** on the real S21 FE —
+prove via the debug readout that the active camera is the true 0.5× ultrawide and that
+a QR decodes from it — *before* layering on any flow. Then build the device-independent
+core (parse, validate, verify sheet, history) behind the `LensController` seam and wire
+it so no payment ever fires without a one-glance confirm. **There is no Dart
+`mobile_scanner` camera path anywhere in this app.**
