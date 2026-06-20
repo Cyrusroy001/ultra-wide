@@ -14,7 +14,23 @@ The native ultrawide hypothesis is proven end-to-end:
 - → **The working ultrawide physical camera id on this device is `"2"`.** Persist it
   as `PrefKeys.cameraId` so the real scan screen skips enumeration.
 
-Now building the rest (device-independent core) on top of the proven camera.
+**Since the gate, the full scan→pay loop is built, tested, rebranded, and installed:**
+- Device-independent core (parse, validate, categories, uri-builder, prefs, favorites,
+  history repos) — all TDD, **34 tests green, analyze clean**.
+- Scan→**Verify sheet** (raw VPA, safety shield, amount numpad, large-amount guard)→
+  launch UPI intent→log to history. Reticle (lime/amber/red) is the signature element.
+- Two-tab nav (Scan / History). History is a scan-log with manual mark-paid + partial
+  summary.
+- **Rebranded to "Ultrawide"** — launcher name, `ultra·wide` wordmark, custom adaptive
+  icon (lime wide-reticle on ink). Internal Dart package stays `scanpay`.
+- Debug APK built + installed on the S21 FE.
+
+**Awaiting:** on-device test of a real UPI scan→verify→pay (grant camera first).
+
+**Still to build (post pay-test):** Quick-Pay favorites strip + add dialog; share-target
++ gallery + clipboard intake; full app-picker (default UPI app) + settings + onboarding.
+The retired `lib/scan/camera_probe.dart` is kept as a camera diagnostic (not on the boot
+path).
 
 - Branch: `feat/scanpay-mvp` (off `main`).
 - `flutter analyze` clean. `flutter test` green (4 tests, `pickUltrawide`).
