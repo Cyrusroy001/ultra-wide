@@ -1,4 +1,5 @@
 # Build & tooling
+*.log
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
