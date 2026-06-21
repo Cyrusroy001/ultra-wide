@@ -3,6 +3,26 @@
 > Living doc. Update at the end of each working session so the next one starts
 > cheap and accurate. Newest status at the top.
 
+## Where we are (2026-06-21, later) — P2P intent wall CONFIRMED; image-pay designed
+
+On-device debugging (S21 FE, RZCW40EKBPE) settled the "₹2,000 gallery" report. It is
+**not informational and not dismissable** — it's a hard wall:
+
+- **UPI apps reject externally-initiated `upi://pay` intents for P2P (personal VPA).**
+  Proven with adb, ScanPay out of the loop: PhonePe blocks *every* external P2P intent
+  (with amount, without amount, even a textbook-clean URI). WhatsApp's external receiver
+  returns **"Invalid UPI ID"** (no debit) — while its in-app **"Pay with UPI"** button
+  paid the *same* VPA `aaryakhodke11@oksbi` (₹5 completed). So the VPA is valid; the
+  external-intent path is what's walled (NPCI anti-fraud). **Not a ScanPay bug.**
+- Merchant QRs (signed) are exempt — they still pay via intent. Only **friend (P2P)**
+  payments hit the wall. And this user can't use the apps' own scanners (dead lens).
+- **Decision:** add a **Pay-via-QR-image** path — re-encode the payment as a fresh QR,
+  hand it to a UPI app's gallery/share flow (PhonePe gallery allows ≤₹2,000; WhatsApp
+  image worked). Design approved + committed:
+  [docs/superpowers/specs/2026-06-21-pay-via-qr-image-design.md](docs/superpowers/specs/2026-06-21-pay-via-qr-image-design.md).
+  See D12. **Next:** writing-plans → de-risk gate (real ₹10 completes via gallery)
+  before any UI polish.
+
 ## Where we are (2026-06-21) — first real-pay test, 3 bugs fixed
 
 User installed the app and tried real payments. Three bugs reported and fixed
@@ -13,12 +33,12 @@ User installed the app and tried real payments. Three bugs reported and fixed
    signature (`sign`), `mode`, `orgid`** and re-encoding `@`→`%40`. Fixed by paying
    from the **exact scanned QR** (`UpiRequest.raw`): fixed-amount QRs pass through
    byte-for-byte; open-amount QRs keep every param and only inject `am`. See D10.
-2. **₹10 to a friend showed PhonePe's "pay up to ₹2,000 via gallery" sheet.** This
-   is PhonePe's handling of *any* external `upi://` deep link (it buckets them like a
-   gallery-imported QR); ₹10 is within the cap so it's informational — DISMISS and it
-   should proceed. The full-QR fix (#1) is what we control. **Needs re-confirmation
-   on-device.** No app-picker appeared because PhonePe is the system default handler
-   (the "preferred UPI app" chooser isn't built yet — still deferred).
+2. **₹10 to a friend showed PhonePe's "pay up to ₹2,000 via gallery" sheet.**
+   ⚠️ **This original read was WRONG** — see the newer 2026-06-21 block at the top. It
+   is a hard block, not informational: PhonePe (and WhatsApp's external receiver) reject
+   external `upi://` P2P intents outright. Fix is the Pay-via-QR-image path (D12), not
+   anything in the intent. No app-picker appeared because PhonePe is the system default
+   handler (the "preferred UPI app" chooser still isn't built — and wouldn't help P2P).
 3. **History tab.** (a) Top slid under the status-bar clock → wrapped in `SafeArea`.
    (b) "tap to confirm" did nothing → real bug: `_reload()` passed an arrow closure
    to `setState` that returned a `Future`, which `setState` rejects, aborting the
