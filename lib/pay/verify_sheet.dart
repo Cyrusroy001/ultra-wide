@@ -286,7 +286,9 @@ class _VerifySheetState extends State<VerifySheet> {
       if (ok != true) return;
     }
 
-    final uri = buildUpiUri(req, amount: _amount);
+    // Fixed-amount merchant QR → pass the scanned string through untouched so a
+    // signed QR stays valid. Open-amount QR → inject the amount the user typed.
+    final uri = buildUpiUri(req, amount: _isFixed ? null : _amount);
     final entry = ScanEntry(
       vpa: req.payeeVpa,
       name: req.payeeName,

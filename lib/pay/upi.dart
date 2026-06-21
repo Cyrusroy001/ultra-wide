@@ -1,5 +1,10 @@
 /// A parsed `upi://` request. `action` is the URI host (e.g. `pay`, `collect`).
 class UpiRequest {
+  /// The EXACT scanned string (trimmed). Kept so the payment can be launched
+  /// from the original QR — preserving the merchant signature (`sign`), `mode`,
+  /// `orgid` and every other param byte-for-byte. The parsed fields below are
+  /// for display/validation only; never rebuild a pay URI from them (D11).
+  final String raw;
   final String action;
   final String payeeVpa; // pa
   final String? payeeName; // pn
@@ -10,6 +15,7 @@ class UpiRequest {
   final String? merchantCode; // mc
 
   const UpiRequest({
+    required this.raw,
     required this.action,
     required this.payeeVpa,
     this.payeeName,
@@ -24,7 +30,8 @@ class UpiRequest {
 /// Parses a `upi:` URI. Returns null if it is not a UPI URI or has no payee.
 /// Validation/safety classification is the job of `validateUpi`, not this.
 UpiRequest? parseUpi(String raw) {
-  final uri = Uri.tryParse(raw.trim());
+  final trimmed = raw.trim();
+  final uri = Uri.tryParse(trimmed);
   if (uri == null || uri.scheme.toLowerCase() != 'upi') return null;
   final q = uri.queryParameters;
   final pa = q['pa'];
@@ -33,6 +40,7 @@ UpiRequest? parseUpi(String raw) {
   final amount = (am != null && am.isNotEmpty) ? double.tryParse(am) : null;
   final host = uri.host.isNotEmpty ? uri.host : uri.path.replaceAll('/', '');
   return UpiRequest(
+    raw: trimmed,
     action: host.toLowerCase(),
     payeeVpa: pa,
     payeeName: q['pn'],

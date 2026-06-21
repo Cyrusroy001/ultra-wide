@@ -24,4 +24,9 @@ void main() {
     expect(parseUpi('https://example.com'), isNull);
     expect(parseUpi('upi://pay?pn=NoVpa'), isNull);
   });
+
+  test('keeps the exact scanned string in raw (signature survives intact)', () {
+    const raw = 'upi://pay?pa=shop@okhdfc&pn=Shop&sign=Zm9v%2Bbar%2F1%3D&mode=02';
+    expect(parseUpi('  $raw  ')!.raw, raw); // trimmed, otherwise byte-identical
+  });
 }

@@ -27,23 +27,33 @@ Future<LaunchResult> launchUpiUri(String uri, {String? package}) async {
   }
 }
 
-/// Builds a `upi://pay` URI from a base request plus an (optionally overridden)
-/// amount and note. Always emits `cu=INR`. The entered amount wins over the
-/// QR's amount so the pay app opens pre-filled.
-String buildUpiUri(UpiRequest base, {double? amount, String? note}) {
-  final amt = amount ?? base.amount;
-  final tn = note ?? base.note;
-  final params = <String, String>{
-    'pa': base.payeeVpa,
-    'pn': ?base.payeeName,
-    if (amt != null) 'am': amt.toStringAsFixed(2),
-    'cu': 'INR',
-    'tn': ?tn,
-    'tr': ?base.txnRef,
-    'mc': ?base.merchantCode,
-  };
-  final query = params.entries
-      .map((e) => '${e.key}=${Uri.encodeComponent(e.value)}')
-      .join('&');
-  return 'upi://pay?$query';
+/// Produces the `upi://pay` string handed to the UPI app. CRITICAL: it starts
+/// from the EXACT scanned QR (`base.raw`) so the merchant signature (`sign`),
+/// `mode`, `orgid` and every other parameter survive byte-for-byte — a real UPI
+/// app transmits the whole QR. Rebuilding from parsed fields drops `sign`, which
+/// makes the payee bank reject a verified merchant as "not accepting payments".
+///
+/// [amount] null → pass the scanned QR through unchanged (fixed-amount / signed
+/// merchant QR stays byte-identical). [amount] set → open-amount QR: keep every
+/// original param, override `am` with the confirmed amount, ensure `cu` exists.
+String buildUpiUri(UpiRequest base, {double? amount}) {
+  final raw = base.raw;
+  if (amount == null) return raw;
+
+  final qi = raw.indexOf('?');
+  final head = qi >= 0 ? raw.substring(0, qi) : raw; // e.g. 'upi://pay'
+  final kept = <String>[];
+  var hasCu = false;
+  if (qi >= 0) {
+    for (final pair in raw.substring(qi + 1).split('&')) {
+      if (pair.isEmpty) continue;
+      final key = pair.split('=').first.toLowerCase();
+      if (key == 'am') continue; // overridden below
+      if (key == 'cu') hasCu = true;
+      kept.add(pair); // preserve original encoding (incl. base64 `sign`)
+    }
+  }
+  kept.add('am=${amount.toStringAsFixed(2)}');
+  if (!hasCu) kept.add('cu=INR');
+  return '$head?${kept.join('&')}';
 }
