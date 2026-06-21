@@ -52,4 +52,22 @@ void main() {
     await repo.clear();
     expect(await repo.list(), isEmpty);
   });
+
+  test('delete removes only the matching entry', () async {
+    final repo = await freshRepo();
+    await repo.add(entry(1));
+    await repo.add(entry(2)); // list: [2, 1]
+    await repo.delete(1);
+    final list = await repo.list();
+    expect(list.length, 1);
+    expect(list.first.timeMillis, 2);
+  });
+
+  test('restore re-inserts keeping newest-first by time', () async {
+    final repo = await freshRepo();
+    await repo.add(entry(1));
+    await repo.add(entry(3)); // list: [3, 1]
+    await repo.restore(entry(2)); // belongs between 3 and 1
+    expect((await repo.list()).map((e) => e.timeMillis), [3, 2, 1]);
+  });
 }

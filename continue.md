@@ -3,6 +3,35 @@
 > Living doc. Update at the end of each working session so the next one starts
 > cheap and accurate. Newest status at the top.
 
+## Where we are (2026-06-21) — first real-pay test, 3 bugs fixed
+
+User installed the app and tried real payments. Three bugs reported and fixed
+(all **device-independent, TDD'd; 40 tests green, analyze clean**):
+
+1. **Merchant payment rejected ("receiver not accepting payments").** Root cause:
+   we rebuilt the `upi://pay` URI from parsed fields, **dropping the merchant
+   signature (`sign`), `mode`, `orgid`** and re-encoding `@`→`%40`. Fixed by paying
+   from the **exact scanned QR** (`UpiRequest.raw`): fixed-amount QRs pass through
+   byte-for-byte; open-amount QRs keep every param and only inject `am`. See D10.
+2. **₹10 to a friend showed PhonePe's "pay up to ₹2,000 via gallery" sheet.** This
+   is PhonePe's handling of *any* external `upi://` deep link (it buckets them like a
+   gallery-imported QR); ₹10 is within the cap so it's informational — DISMISS and it
+   should proceed. The full-QR fix (#1) is what we control. **Needs re-confirmation
+   on-device.** No app-picker appeared because PhonePe is the system default handler
+   (the "preferred UPI app" chooser isn't built yet — still deferred).
+3. **History tab.** (a) Top slid under the status-bar clock → wrapped in `SafeArea`.
+   (b) "tap to confirm" did nothing → real bug: `_reload()` passed an arrow closure
+   to `setState` that returned a `Future`, which `setState` rejects, aborting the
+   rebuild. Replaced whole-row tap with an explicit **Mark paid / Paid** pill (+
+   haptic) and added an undoable **delete** button. See D11.
+
+**Awaiting (device gate):** re-test a real merchant scan→verify→pay now that the QR
+is passed through intact, and confirm the friend P2P case past PhonePe's ₹2,000 sheet.
+Build/install was about to run when the user paused to connect the phone.
+
+**Still to build:** Quick-Pay favorites strip + add dialog; share-target + gallery +
+clipboard intake; full app-picker (default UPI app) + settings + onboarding.
+
 ## Where we are (2026-06-20)
 
 **✅ GATE PASSED on the real S21 FE (SM G990E, id RZCW40EKBPE, Android 16).**

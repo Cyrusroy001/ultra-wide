@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/tokens.dart';
 import 'history_repo.dart';
@@ -20,41 +21,75 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Future<(List<ScanEntry>, HistorySummary)> _load() async =>
       (await widget.repo.list(), await widget.repo.summary());
 
-  void _reload() => setState(() => _future = _load());
+  // Block body on purpose: an arrow `=> _future = _load()` returns the assigned
+  // Future, and setState() rejects a callback that returns a Future — which
+  // silently aborted every refresh (the old "tap to confirm does nothing" bug).
+  void _reload() => setState(() {
+        _future = _load();
+      });
+
+  Future<void> _togglePaid(ScanEntry e) async {
+    HapticFeedback.selectionClick();
+    await widget.repo.markPaid(e.timeMillis, !e.paid);
+    if (mounted) _reload();
+  }
+
+  Future<void> _delete(ScanEntry e) async {
+    final messenger = ScaffoldMessenger.of(context);
+    await widget.repo.delete(e.timeMillis);
+    if (!mounted) return;
+    _reload();
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: const Text('Scan deleted'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () async {
+            await widget.repo.restore(e);
+            if (mounted) _reload();
+          },
+        ),
+      ));
+  }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<(List<ScanEntry>, HistorySummary)>(
-      future: _future,
-      builder: (context, snap) {
-        if (!snap.hasData) {
-          return const Center(child: CircularProgressIndicator(color: AppTokens.lime));
-        }
-        final (entries, summary) = snap.data!;
-        return RefreshIndicator(
-          onRefresh: () async => _reload(),
-          color: AppTokens.lime,
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              _summaryStrip(summary),
-              const SizedBox(height: 8),
-              _honestyBanner(),
-              const SizedBox(height: 8),
-              if (entries.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 40),
-                  child: Center(
-                    child: Text('No scans yet.',
-                        style: TextStyle(color: AppTokens.mist)),
-                  ),
-                )
-              else
-                ...entries.map(_row),
-            ],
-          ),
-        );
-      },
+    // SafeArea: this screen is a bare Scaffold body (no AppBar), so without it
+    // the summary strip slides under the status-bar clock.
+    return SafeArea(
+      child: FutureBuilder<(List<ScanEntry>, HistorySummary)>(
+        future: _future,
+        builder: (context, snap) {
+          if (!snap.hasData) {
+            return const Center(child: CircularProgressIndicator(color: AppTokens.lime));
+          }
+          final (entries, summary) = snap.data!;
+          return RefreshIndicator(
+            onRefresh: () async => _reload(),
+            color: AppTokens.lime,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                _summaryStrip(summary),
+                const SizedBox(height: 8),
+                _honestyBanner(),
+                const SizedBox(height: 8),
+                if (entries.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 40),
+                    child: Center(
+                      child: Text('No scans yet.',
+                          style: TextStyle(color: AppTokens.mist)),
+                    ),
+                  )
+                else
+                  ...entries.map(_row),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -93,7 +128,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           const SizedBox(width: 6),
           Expanded(
             child: Text(
-              'This is a scan log, not a payment confirmation. Tap a row to mark it paid.',
+              'Scan log, not a payment confirmation — mark a scan paid or delete it.',
               style: TextStyle(fontSize: 11, color: AppTokens.mist.withValues(alpha: 0.9)),
             ),
           ),
@@ -103,47 +138,82 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Widget _row(ScanEntry e) {
     final time = DateTime.fromMillisecondsSinceEpoch(e.timeMillis);
     final color = categoryColor(e.category);
-    return InkWell(
-      onTap: () async {
-        await widget.repo.markPaid(e.timeMillis, !e.paid);
-        _reload();
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        child: Row(
-          children: [
-            Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(e.name ?? e.vpa,
-                      style: const TextStyle(color: AppTokens.cloud, fontSize: 14)),
-                  Text(
-                    '${_fmtTime(time)} · ${e.category.name}',
-                    style: const TextStyle(color: AppTokens.mist, fontSize: 11),
-                  ),
-                ],
-              ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  e.amount != null ? '₹${e.amount!.toStringAsFixed(0)}' : 'enter amt',
-                  style: const TextStyle(
-                      fontFamily: AppTokens.mono, color: AppTokens.cloud, fontSize: 13),
-                ),
+                Text(e.name ?? e.vpa,
+                    style: const TextStyle(color: AppTokens.cloud, fontSize: 14)),
                 const SizedBox(height: 2),
                 Text(
-                  e.paid ? 'paid ✓' : 'tap to confirm',
-                  style: TextStyle(
-                      fontSize: 10,
-                      color: e.paid ? AppTokens.lime : AppTokens.mist),
+                  '${_fmtTime(time)} · ${e.category.name}',
+                  style: const TextStyle(color: AppTokens.mist, fontSize: 11),
                 ),
               ],
             ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                e.amount != null ? '₹${e.amount!.toStringAsFixed(0)}' : 'enter amt',
+                style: const TextStyle(
+                    fontFamily: AppTokens.mono, color: AppTokens.cloud, fontSize: 13),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _paidPill(e),
+                  const SizedBox(width: 2),
+                  IconButton(
+                    onPressed: () => _delete(e),
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 36, minHeight: 32),
+                    icon: const Icon(Icons.delete_outline, size: 18, color: AppTokens.mist),
+                    tooltip: 'Delete scan',
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Explicit, obviously-tappable paid toggle (the old whole-row tap gave almost
+  /// no visual feedback, so it read as "not working").
+  Widget _paidPill(ScanEntry e) {
+    final paid = e.paid;
+    return InkWell(
+      onTap: () => _togglePaid(e),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: paid ? AppTokens.lime.withValues(alpha: 0.18) : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: paid ? AppTokens.lime : AppTokens.slateSoft),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(paid ? Icons.check_circle : Icons.radio_button_unchecked,
+                size: 13, color: paid ? AppTokens.lime : AppTokens.mist),
+            const SizedBox(width: 4),
+            Text(paid ? 'Paid' : 'Mark paid',
+                style: TextStyle(
+                    fontSize: 11, color: paid ? AppTokens.lime : AppTokens.mist)),
           ],
         ),
       ),

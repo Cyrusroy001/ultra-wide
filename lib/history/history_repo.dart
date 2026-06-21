@@ -97,6 +97,22 @@ class HistoryRepo {
     await _save(items);
   }
 
+  /// Removes a single entry (e.g. a failed/abandoned scan the user clears).
+  Future<void> delete(int timeMillis) async {
+    final items = (await list())..removeWhere((e) => e.timeMillis == timeMillis);
+    await _save(items);
+  }
+
+  /// Puts a previously-deleted entry back, keeping the log newest-first by time
+  /// (so undo lands it at its original position, not the top).
+  Future<void> restore(ScanEntry e) async {
+    final items = await list();
+    var i = items.indexWhere((x) => x.timeMillis < e.timeMillis);
+    if (i < 0) i = items.length;
+    items.insert(i, e);
+    await _save(items);
+  }
+
   Future<void> clear() => _p.remove(PrefKeys.history);
 
   Future<HistorySummary> summary() async {
