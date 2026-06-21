@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../history/history_repo.dart';
 import '../theme/tokens.dart';
 import 'categories.dart';
+import 'gallery_cap.dart';
 import 'launcher.dart';
 import 'upi_validator.dart';
 
@@ -17,11 +18,18 @@ class VerifySheet extends StatefulWidget {
     required this.verdict,
     required this.onPay,
     this.largeAmountThreshold = 5000,
+    this.onSaveQr,
+    this.onShareQr,
   });
 
   final UpiVerdict verdict;
   final OnPay onPay;
   final double largeAmountThreshold;
+
+  /// Optional second pay path: re-encode to a QR image and save / share it,
+  /// for P2P payees that reject external upi:// intents. Null → section hidden.
+  final OnPay? onSaveQr;
+  final OnPay? onShareQr;
 
   @override
   State<VerifySheet> createState() => _VerifySheetState();
@@ -89,9 +97,56 @@ class _VerifySheetState extends State<VerifySheet> {
           if (_isFixed) _fixedTag() else _numpad(),
           const SizedBox(height: 16),
           _payButton(req.payeeName),
+          if (widget.onSaveQr != null && widget.onShareQr != null) ...[
+            const SizedBox(height: 14),
+            _imagePaySection(),
+          ],
         ],
         ),
       ),
+    );
+  }
+
+  Widget _imagePaySection() {
+    final overCap = galleryCapExceeded(_amount);
+    final ready = _amount > 0 && !overCap;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Divider(color: AppTokens.slateSoft, height: 1),
+        const SizedBox(height: 12),
+        const Text('Paying a person? Pay with a QR image',
+            style: TextStyle(
+                color: AppTokens.cloud, fontSize: 13, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 6),
+        Text(
+          overCap
+              ? 'Over ₹2,000 — use the Pay button or lower the amount.'
+              : 'Gallery/image payments are capped at ₹2,000 by UPI apps.',
+          style: TextStyle(
+              color: overCap ? AppTokens.amber : AppTokens.mist, fontSize: 11),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: ready ? () => _imagePay(widget.onSaveQr!) : null,
+                icon: const Icon(Icons.download, size: 18),
+                label: const Text('Save QR'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: ready ? () => _imagePay(widget.onShareQr!) : null,
+                icon: const Icon(Icons.ios_share, size: 18),
+                label: const Text('Share QR'),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -288,6 +343,14 @@ class _VerifySheetState extends State<VerifySheet> {
 
     // Fixed-amount merchant QR → pass the scanned string through untouched so a
     // signed QR stays valid. Open-amount QR → inject the amount the user typed.
+    final (uri, entry) = _uriAndEntry();
+    await widget.onPay(uri, entry);
+  }
+
+  /// Builds the launch URI (D10: pass-through for fixed, inject `am` for open)
+  /// and the matching history entry. Shared by the intent and image-pay paths.
+  (String, ScanEntry) _uriAndEntry() {
+    final req = widget.verdict.request!;
     final uri = buildUpiUri(req, amount: _isFixed ? null : _amount);
     final entry = ScanEntry(
       vpa: req.payeeVpa,
@@ -297,6 +360,11 @@ class _VerifySheetState extends State<VerifySheet> {
       timeMillis: DateTime.now().millisecondsSinceEpoch,
       note: req.note,
     );
-    await widget.onPay(uri, entry);
+    return (uri, entry);
+  }
+
+  Future<void> _imagePay(OnPay action) async {
+    final (uri, entry) = _uriAndEntry();
+    await action(uri, entry);
   }
 }
